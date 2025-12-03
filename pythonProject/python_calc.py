@@ -76,9 +76,9 @@ def calculate_formulas(df_data: pd.DataFrame, df_targil: pd.DataFrame, engine):
             conn.execute(text(f"DELETE FROM results_t WHERE method = :m"), {"m": METHOD_NAME})
             conn.execute(text(f"DELETE FROM log_t WHERE method = :m"), {"m": METHOD_NAME})
             conn.commit()
-        print("🧹 תוצאות קודמות נוקו.")
+        print(" תוצאות קודמות נוקו.")
     except Exception as e:
-        print(f"⚠️ שגיאה בניקוי רשומות קודמות: {e}")
+        print(f" שגיאה בניקוי רשומות קודמות: {e}")
 
     df_data[['a','b','c','d']] = df_data[['a','b','c','d']].apply(pd.to_numeric, errors='coerce').fillna(0)
 
@@ -88,7 +88,7 @@ def calculate_formulas(df_data: pd.DataFrame, df_targil: pd.DataFrame, engine):
         tnai_raw = row['tnai']
         false_raw = row['false_targil']
 
-        print(f"\n⚡️ מעבד נוסחה ID: {targil_id}, נוסחה: {targil_raw}")
+        print(f"\n מעבד נוסחה ID: {targil_id}, נוסחה: {targil_raw}")
 
         expr = transform_expression(targil_raw)
         false_expr = transform_expression(false_raw) if pd.notnull(false_raw) else None
@@ -112,7 +112,7 @@ def calculate_formulas(df_data: pd.DataFrame, df_targil: pd.DataFrame, engine):
             calculated_results = np.nan_to_num(calculated_results, nan=0.0, posinf=1e10, neginf=-1e10)
 
         except Exception as e:
-            print(f"⚠️ שגיאה בחישוב נוסחה {targil_id}: {e}")
+            print(f" שגיאה בחישוב נוסחה {targil_id}: {e}")
             continue
 
         duration = time.time() - start_time
@@ -125,12 +125,12 @@ def calculate_formulas(df_data: pd.DataFrame, df_targil: pd.DataFrame, engine):
         })
         results_list.append(temp_results_df)
         log_list.append({'targil_id': targil_id, 'method': METHOD_NAME, 'time_run': float(duration)})
-        print(f"✅ נוסחה {targil_id} חישבה {len(calculated_results)} רשומות בזמן {duration:.3f} שניות")
+        print(f" נוסחה {targil_id} חישבה {len(calculated_results)} רשומות בזמן {duration:.3f} שניות")
 
     # Bulk insert ב־chunks בטוחים
     if results_list:
         final_results_df = pd.concat(results_list, ignore_index=True)
-        print(f"\n✅ סיום חישוב. מכניס {len(final_results_df)} רשומות ל-results_t...")
+        print(f"\n סיום חישוב. מכניס {len(final_results_df)} רשומות ל-results_t...")
 
         try:
             chunk_size = 500  # מספר רשומות קטן יותר כדי למנוע COUNT field error
@@ -139,17 +139,17 @@ def calculate_formulas(df_data: pd.DataFrame, df_targil: pd.DataFrame, engine):
                     end = start + chunk_size
                     chunk = final_results_df.iloc[start:end]
                     chunk.to_sql('results_t', conn, if_exists='append', index=False)
-            print("✅ תוצאות נשמרו בהצלחה ב-results_t.")
+            print(" תוצאות נשמרו בהצלחה ב-results_t.")
         except Exception as e:
-            print(f"❌ שגיאה בהכנסת נתונים: {e}")
+            print(f" שגיאה בהכנסת נתונים: {e}")
 
     if log_list:
         df_log = pd.DataFrame(log_list)
         try:
             df_log.to_sql('log_t', engine, if_exists='append', index=False)
-            print("✅ זמני ריצה נשמרו ב-log_t.")
+            print(" זמני ריצה נשמרו ב-log_t.")
         except Exception as e:
-            print(f"❌ שגיאה בהכנסת נתוני לוג: {e}")
+            print(f" שגיאה בהכנסת נתוני לוג: {e}")
 
 def main():
     url = build_sqlalchemy_url(SERVER_NAME, DATABASE_NAME, DRIVER)
@@ -160,7 +160,7 @@ def main():
         df_data, df_targil = get_dataframes(engine)
         calculate_formulas(df_data, df_targil, engine)
     except Exception as e:
-        print(f"❌ קרתה שגיאה בתהליך הראשי: {e}")
+        print(f" קרתה שגיאה בתהליך הראשי: {e}")
     finally:
         try:
             engine.dispose()
