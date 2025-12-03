@@ -1,6 +1,4 @@
-﻿-- ===============================================
--- יצירת מסד הנתונים (אם עדיין לא קיים)
--- ===============================================
+﻿
 IF DB_ID('PaymentFormulasDB') IS NULL
 BEGIN
     CREATE DATABASE PaymentFormulasDB;
@@ -10,9 +8,7 @@ GO
 USE PaymentFormulasDB;
 GO
 
--- ===============================================
--- 1️⃣ טבלת נתונים: data_t
--- ===============================================
+-- טבלת נתונים: data_t--
 IF OBJECT_ID('data_t', 'U') IS NOT NULL
     DROP TABLE data_t;
 GO
@@ -26,9 +22,7 @@ CREATE TABLE data_t (
 );
 GO
 
--- ===============================================
--- 2️⃣ טבלת נוסחאות: targil_t
--- ===============================================
+--  טבלת נוסחאות: targil_t--
 IF OBJECT_ID('targil_t', 'U') IS NOT NULL
     DROP TABLE targil_t;
 GO
@@ -41,9 +35,7 @@ CREATE TABLE targil_t (
 );
 GO
 
--- ===============================================
--- 3️⃣ טבלת תוצאות: results_t
--- ===============================================
+--  טבלת תוצאות: results_t--
 IF OBJECT_ID('results_t', 'U') IS NOT NULL
     DROP TABLE results_t;
 GO
@@ -57,9 +49,7 @@ CREATE TABLE results_t (
 );
 GO
 
--- ===============================================
--- 4️⃣ טבלת לוג: log_t
--- ===============================================
+--  טבלת לוג: log_t--
 IF OBJECT_ID('log_t', 'U') IS NOT NULL
     DROP TABLE log_t;
 GO
@@ -73,10 +63,8 @@ CREATE TABLE log_t (
 GO
 
 
--- אפשרות ליצירת מיליון רשומות בנתונים אקראיים
--- נשתמש בלולאה T-SQL
--- מילוי data_t במהירות עם 1,000,000 רשומות
--- ===============================================
+-- אפשרות ליצירת מיליון רשומות בנתונים אקראיים--
+
 WITH Numbers AS (
     SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
     UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8
@@ -97,9 +85,7 @@ CROSS JOIN Numbers n6; -- 10^6 = 1,000,000 רשומות
 GO
 
 
--- ===============================================
--- 7️⃣ מילוי targil_t עם מספר נוסחאות לדוגמה
--- ===============================================
+--מילוי targil_t עם מספר נוסחאות לדוגמה--
 INSERT INTO targil_t (targil, tnai, false_targil) VALUES
 ('2 * c', NULL, NULL),
 ('SQRT(POWER(2,d) + POWER(2,c))', NULL, NULL),
@@ -110,51 +96,15 @@ INSERT INTO targil_t (targil, tnai, false_targil) VALUES
 ('LN(a+1) + LN(b+1) + LN(c+1)', NULL, NULL),
 -- נוסחאות עם תנאי
 ('a + 5', 'b < 20', 'd - 5'),
-('POWER(b,2) + a', 'd > 30 AND c < 50', 'SQRT(b)'),
-('EXP(a/50) + c', 'b < 10 OR d > 90', 'b - d'),
 (
-    'SQRT(ABS(b - c) + LN(d + 1)) + POWER(a, 1.5)',  -- נוסחה מורכבת
-    'a > 50',                                       -- התנאי
-    'EXP(a/100) + b - c'                            -- מה לחשב אם התנאי לא מתקיים
+    'SQRT(ABS(b - c) + LN(d + 1)) + POWER(a, 1.5)',  
+    'a > 50',                                       
+    'EXP(a/100) + b - c'                            
 );
 GO
 
-SELECT * 
-FROM data_t
-WHERE data_id = 12596;
-
-SELECT COUNT(*) FROM results_t;
-SELECT TOP 10 * 
-FROM results_t
-WHERE targil_id = 6
-ORDER BY results_id DESC;
-
-SELECT  * FROM targil_t
-WHERE targil_id = 6
-;
-SELECT * FROM results_t
-WHERE targil_id = 7
-AND method = 'C#'
-;
-
-SELECT  data_id, targil_id, method, result
-FROM results_t
-ORDER BY results_id DESC;
-
-SELECT COUNT(*) AS total_results FROM results_t;
-
-SELECT  * FROM data_t;
-SELECT  * FROM targil_t;
-SELECT  * FROM results_t;
-SELECT TOP 10 * FROM log_t;
-
-SELECT COUNT(*) FROM data_t;
-
-
-
 
 ---פרוצדורה---
-GO
 CREATE OR ALTER PROCEDURE sp_CalculateFormulas_Fast
 AS
 BEGIN
@@ -209,7 +159,20 @@ BEGIN
             ';
         END
 
-        EXEC sp_executesql @sql;
+        -- טיפול בשגיאות מתמטיות
+        BEGIN TRY
+            EXEC sp_executesql @sql;
+        END TRY
+        BEGIN CATCH
+            -- במקרה של שגיאה, הכנס 0 לכל הרשומות של הנוסחה הזו
+            INSERT INTO results_t (data_id, targil_id, method, result)
+            SELECT data_id, @targil_id, 'SQL-Fast', 0
+            FROM data_t;
+
+            -- רישום שגיאה בלוג
+            INSERT INTO log_t (targil_id, method, time_run)
+            VALUES (@targil_id, 'SQL-Fast-Error', 0);
+        END CATCH;
 
         SET @endTime = GETDATE();
 
@@ -226,12 +189,51 @@ BEGIN
     CLOSE cur;
     DEALLOCATE cur;
 END
+--השוואה--
+SELECT sql.data_id, sql.targil_id,
+       sql.result AS sql_result,
+       py.result  AS py_result
+FROM results_t sql
+JOIN results_t py
+    ON sql.data_id = py.data_id
+    AND sql.targil_id = py.targil_id
+WHERE sql.method = 'SQL-Fast'
+  AND py.method = 'Python'
+  AND ISNULL(sql.result, 0) <> ISNULL(py.result, 0);
+
+
+--בדיקות--
+
+SELECT * 
+FROM data_t
+WHERE data_id = 1000014;
+
+
+SELECT targil_id, COUNT(*) AS RecordsPerTargil
+FROM results_t
+GROUP BY targil_id;
+
+SELECT targil_id, COUNT(*) AS RecordsPerTargil
+FROM results_t
+GROUP BY targil_id
+ORDER BY targil_id;
 
 SELECT *
 FROM results_t
 ORDER BY results_id DESC;
+
+SELECT *
+FROM results_t
+WHERE targil_id = 18
+
+SELECT  TOP 10*
+FROM log_t
+WHERE method = 'Python_Pandas_Eval_Fixed';
+
 SELECT *
 FROM log_t
 ORDER BY log_id DESC;
 
 
+SELECT COUNT(*) AS TotalRecords FROM results_t;
+SELECT TOP 200 * FROM results_t ORDER BY results_id DESC;
